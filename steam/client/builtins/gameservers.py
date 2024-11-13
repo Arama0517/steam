@@ -34,13 +34,14 @@ Filter code                 What it does
 \\gameaddr\\[ip]            Return only servers on the specified IP address (port supported and optional)
 =========================== =========================================================================================================================
 """
-from steam.steamid import SteamID
+
 from steam.core.msg import MsgProto
 from steam.enums import EResult
 from steam.enums.emsg import EMsg
-from steam.utils import ip4_to_int, ip4_from_int, ip6_from_bytes
-from steam.utils.proto import proto_to_dict
 from steam.exceptions import SteamError
+from steam.steamid import SteamID
+from steam.utils import ip4_from_int, ip4_to_int, ip6_from_bytes
+from steam.utils.proto import proto_to_dict
 
 
 class GameServers:
@@ -92,10 +93,11 @@ class SteamGameServers:
         kw['filter_text'] = filter_text
         kw['max_servers'] = max_servers
 
-        resp = self._s.send_job_and_wait(MsgProto(EMsg.ClientGMSServerQuery),
-                                         kw,
-                                         timeout=timeout,
-                                         )
+        resp = self._s.send_job_and_wait(
+            MsgProto(EMsg.ClientGMSServerQuery),
+            kw,
+            timeout=timeout,
+        )
 
         if resp is None:
             return None
@@ -150,13 +152,14 @@ class SteamGameServers:
               'version': '1.35.4.0'}
             ]
         """
-        resp = self._s.send_um_and_wait("GameServers.GetServerList#1",
-                                        {
-                                         "filter": filter_text,
-                                         "limit": max_servers,
-                                        },
-                                        timeout=20,
-                                        )
+        resp = self._s.send_um_and_wait(
+            'GameServers.GetServerList#1',
+            {
+                'filter': filter_text,
+                'limit': max_servers,
+            },
+            timeout=20,
+        )
 
         if resp is None:
             return None
@@ -190,10 +193,11 @@ class SteamGameServers:
 
             {SteamID(id=123456, type='AnonGameServer', universe='Public', instance=1234): '1.2.3.4:27060'}
         """
-        resp = self._s.send_um_and_wait("GameServers.GetServerIPsBySteamID#1",
-                                        {"server_steamids": server_steam_ids},
-                                        timeout=timeout,
-                                        )
+        resp = self._s.send_um_and_wait(
+            'GameServers.GetServerIPsBySteamID#1',
+            {'server_steamids': server_steam_ids},
+            timeout=timeout,
+        )
         if resp is None:
             return None
         if resp.header.eresult != EResult.OK:
@@ -218,10 +222,11 @@ class SteamGameServers:
 
             {'1.2.3.4:27060': SteamID(id=123456, type='AnonGameServer', universe='Public', instance=1234)}
         """
-        resp = self._s.send_um_and_wait("GameServers.GetServerSteamIDsByIP#1",
-                                        {"server_ips": server_ips},
-                                        timeout=timeout,
-                                        )
+        resp = self._s.send_um_and_wait(
+            'GameServers.GetServerSteamIDsByIP#1',
+            {'server_ips': server_ips},
+            timeout=timeout,
+        )
         if resp is None:
             return None
         if resp.header.eresult != EResult.OK:

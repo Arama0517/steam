@@ -1,6 +1,10 @@
-import requests
 from binascii import hexlify
-from steam.core.crypto import sha1_hash, random_bytes
+
+import requests
+from aiohttp import ClientSession
+
+from steam.core.crypto import random_bytes, sha1_hash
+
 
 def make_requests_session():
     """
@@ -10,11 +14,19 @@ def make_requests_session():
     session = requests.Session()
 
     version = __import__('steam').__version__
-    ua = "python-steam/{} {}".format(version,
-                                session.headers['User-Agent'])
+    ua = 'python-steam/{} {}'.format(version, session.headers['User-Agent'])
     session.headers['User-Agent'] = ua
 
     return session
+
+
+class AioHttpClientSessionWithUA(ClientSession):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        version = __import__('steam').__version__
+        ua = f'python-steam/{version} {self.headers.get("User-Agent")}'
+        self.headers['User-Agent'] = ua
+
 
 def generate_session_id():
     """

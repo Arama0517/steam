@@ -1,10 +1,12 @@
 import logging
+
 from eventemitter import EventEmitter
-from steam.steamid import SteamID
-from steam.enums import EResult, EFriendRelationship
-from steam.enums.emsg import EMsg
-from steam.core.msg import MsgProto
+
 from steam.client.user import SteamUser
+from steam.core.msg import MsgProto
+from steam.enums import EFriendRelationship, EResult
+from steam.enums.emsg import EMsg
+from steam.steamid import SteamID
 
 
 class Friends:
@@ -12,7 +14,8 @@ class Friends:
         super().__init__(*args, **kwargs)
 
         #: :class:`.SteamFriendlist` instance
-        self.friends = SteamFriendlist(self, logger_name="%s.friends" % self.__class__.__name__)
+        self.friends = SteamFriendlist(self, logger_name='%s.friends' % self.__class__.__name__)
+
 
 class SteamFriendlist(EventEmitter):
     """SteamFriendlist is an object that keeps state of user's friend list.
@@ -20,6 +23,7 @@ class SteamFriendlist(EventEmitter):
     You can iterate over it, check if it contains a particular ``steam id``,
     or get :class:`.SteamUser` for a ``steam id``.
     """
+
     EVENT_READY = 'ready'
     """Friend list is ready for use
     """
@@ -63,7 +67,7 @@ class SteamFriendlist(EventEmitter):
 
     def emit(self, event, *args):
         if event is not None:
-            self._LOG.debug("Emit event: %s" % repr(event))
+            self._LOG.debug('Emit event: %s' % repr(event))
         EventEmitter.emit(self, event, *args)
 
     def _handle_disconnect(self):
@@ -92,12 +96,12 @@ class SteamFriendlist(EventEmitter):
             suser = self._steam.get_user(steamid, False)
             rel = EFriendRelationship(friend.efriendrelationship)
 
-            if steamid not in self._fr and rel != EFriendRelationship.NONE: # 0
+            if steamid not in self._fr and rel != EFriendRelationship.NONE:  # 0
                 self._fr[steamid] = suser
                 suser.relationship = rel
                 steamids_to_check.add(steamid)
 
-                if rel in (2,4):  # RequestRecipient = 2, RequestInitiator = 4
+                if rel in (2, 4):  # RequestRecipient = 2, RequestInitiator = 4
                     if rel == EFriendRelationship.RequestRecipient:
                         self.emit(self.EVENT_FRIEND_INVITE, suser)
             else:
@@ -107,7 +111,7 @@ class SteamFriendlist(EventEmitter):
                     suser = self._fr.pop(steamid, None)
                     if suser and oldrel not in (EFriendRelationship.Ignored, 0):
                         self.emit(self.EVENT_FRIEND_REMOVED, suser)
-                elif oldrel in (2,4) and rel == EFriendRelationship.Friend:
+                elif oldrel in (2, 4) and rel == EFriendRelationship.Friend:
                     self.emit(self.EVENT_FRIEND_NEW, suser)
 
         # request persona state for any new entries
@@ -119,10 +123,10 @@ class SteamFriendlist(EventEmitter):
             self.emit(self.EVENT_READY)
 
     def __repr__(self):
-        return "<%s %d users>" % (
+        return '<%s %d users>' % (
             self.__class__.__name__,
             len(self._fr),
-            )
+        )
 
     def __len__(self):
         return len(self._fr)
@@ -191,9 +195,9 @@ class SteamFriendlist(EventEmitter):
         elif not isinstance(steamid, SteamID):
             steamid = SteamID(steamid)
 
-        resp = self._steam.send_um_and_wait("Player.IgnoreFriend#1",
-                                            {"steamid": steamid},
-                                            timeout=10)
+        resp = self._steam.send_um_and_wait(
+            'Player.IgnoreFriend#1', {'steamid': steamid}, timeout=10
+        )
 
         if not resp:
             return EResult.Timeout
@@ -218,9 +222,9 @@ class SteamFriendlist(EventEmitter):
         elif not isinstance(steamid, SteamID):
             steamid = SteamID(steamid)
 
-        resp = self._steam.send_um_and_wait("Player.IgnoreFriend#1",
-                                            {"steamid": steamid, "unignore": True},
-                                            timeout=10)
+        resp = self._steam.send_um_and_wait(
+            'Player.IgnoreFriend#1', {'steamid': steamid, 'unignore': True}, timeout=10
+        )
 
         if not resp:
             return EResult.Timeout

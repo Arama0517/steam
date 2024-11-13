@@ -1,10 +1,13 @@
-from datetime import datetime
+import asyncio
+from asyncio import Event
 from binascii import hexlify
-from gevent.event import Event
-from steam.steamid import SteamID
-from steam.enums import EFriendRelationship, EPersonaState, EChatEntryType
-from steam.enums.emsg import EMsg
+from datetime import UTC, datetime
+
 from steam.core.msg import MsgProto
+from steam.enums import EChatEntryType, EFriendRelationship, EPersonaState
+from steam.enums.emsg import EMsg
+from steam.steamid import SteamID
+
 
 class SteamUser:
     """
@@ -13,10 +16,11 @@ class SteamUser:
     .. note::
         This is an internal object that can be obtained by :meth:`SteamClient.get_user`
     """
+
     _pstate = None
     _pstate_requested = False
     steam_id = SteamID()  #: steam id
-    relationship = EFriendRelationship.NONE   #: friendship status
+    relationship = EFriendRelationship.NONE  #: friendship status
 
     def __init__(self, steam_id, steam):
         self._pstate_ready = Event()
@@ -24,14 +28,14 @@ class SteamUser:
         self.steam_id = SteamID(steam_id)
 
     def __repr__(self):
-        return "<{}({}, {}, {})>".format(
+        return '<{}({}, {}, {})>'.format(
             self.__class__.__name__,
             str(self.steam_id),
             self.relationship,
             self.state,
-            )
+        )
 
-    def refresh(self, wait=True):
+    async def refresh(self, wait=True):
         if self._pstate_requested and self._pstate_ready.is_set():
             self._pstate_requested = False
 
@@ -41,7 +45,7 @@ class SteamUser:
             self._pstate_requested = True
 
         if wait:
-            self._pstate_ready.wait(timeout=5)
+            await asyncio.wait_for(self._pstate_ready.wait(), timeout=5)
             self._pstate_requested = False
 
     def get_ps(self, field_name, wait_pstate=True):
@@ -61,13 +65,13 @@ class SteamUser:
     def last_logon(self):
         """:rtype: :class:`datetime`, :class:`None`"""
         ts = self.get_ps('last_logon')
-        return datetime.utcfromtimestamp(ts) if ts else None
+        return datetime.fromtimestamp(ts, UTC) if ts else None
 
     @property
     def last_logoff(self):
         """:rtype: :class:`datetime`, :class:`None`"""
         ts = self.get_ps('last_logoff')
-        return datetime.utcfromtimestamp(ts) if ts else None
+        return datetime.fromtimestamp(ts, UTC) if ts else None
 
     @property
     def name(self):
@@ -111,7 +115,10 @@ class SteamUser:
         """
         hashbytes = self.get_ps('avatar_hash')
 
-        if hashbytes != "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000":
+        if (
+            hashbytes
+            != '\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000'
+        ):
             ahash = hexlify(hashbytes).decode('ascii')
         else:
             ahash = 'fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb'
@@ -121,7 +128,7 @@ class SteamUser:
             1: '_medium',
             2: '_full',
         }
-        url = "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/%s/%s%s.jpg"
+        url = 'http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/%s/%s%s.jpg'
 
         return url % (ahash[:2], ahash, sizes[size])
 
@@ -133,18 +140,24 @@ class SteamUser:
         """
         # new chat
         if self._steam.chat_mode == 2:
-            self._steam.send_um("FriendMessages.SendMessage#1", {
-                'steamid': self.steam_id,
-                'message': message,
-                'chat_entry_type': EChatEntryType.ChatMsg,
-                })
+            self._steam.send_um(
+                'FriendMessages.SendMessage#1',
+                {
+                    'steamid': self.steam_id,
+                    'message': message,
+                    'chat_entry_type': EChatEntryType.ChatMsg,
+                },
+            )
         # old chat
         else:
-            self._steam.send(MsgProto(EMsg.ClientFriendMsg), {
-                'steamid': self.steam_id,
-                'chat_entry_type': EChatEntryType.ChatMsg,
-                'message': message.encode('utf8'),
-                })
+            self._steam.send(
+                MsgProto(EMsg.ClientFriendMsg),
+                {
+                    'steamid': self.steam_id,
+                    'chat_entry_type': EChatEntryType.ChatMsg,
+                    'message': message.encode('utf8'),
+                },
+            )
 
     def block(self):
         """Block user"""

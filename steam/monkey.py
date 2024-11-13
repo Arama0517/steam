@@ -14,6 +14,7 @@ See :mod:`gevent.monkey` for details
     from steam.client import SteamClient, EMsg
 """
 
+
 def patch_minimal():
     """
     This method needs to be called before any other imports
@@ -21,6 +22,7 @@ def patch_minimal():
     It calls :meth:`gevent.monkey.patch_socket()` and :meth:`gevent.monkey.patch_ssl()`
     """
     import gevent.monkey
+
     gevent.monkey.patch_socket()
     gevent.monkey.patch_ssl()
     gevent.monkey.patch_dns()

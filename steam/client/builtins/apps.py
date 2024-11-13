@@ -1,8 +1,10 @@
 from binascii import hexlify
+
 import vdf
-from steam.enums import EResult, EServerType
-from steam.enums.emsg import EMsg
+
 from steam.core.msg import MsgProto
+from steam.enums import EResult
+from steam.enums.emsg import EMsg
 from steam.utils.proto import proto_fill_from_dict
 
 
@@ -30,10 +32,11 @@ class Apps:
         :return: number of players
         :rtype: :class:`int`, :class:`.EResult`
         """
-        resp = self.send_job_and_wait(MsgProto(EMsg.ClientGetNumberOfCurrentPlayersDP),
-                                      {'appid': app_id},
-                                      timeout=timeout
-                                      )
+        resp = self.send_job_and_wait(
+            MsgProto(EMsg.ClientGetNumberOfCurrentPlayersDP),
+            {'appid': app_id},
+            timeout=timeout,
+        )
         if resp is None:
             return EResult.Timeout
         elif resp.eresult == EResult.OK:
@@ -41,7 +44,15 @@ class Apps:
         else:
             return EResult(resp.eresult)
 
-    def get_product_info(self, apps=[], packages=[], meta_data_only=False, raw=False, auto_access_tokens=True, timeout=15):
+    def get_product_info(
+        self,
+        apps=[],
+        packages=[],
+        meta_data_only=False,
+        raw=False,
+        auto_access_tokens=True,
+        timeout=15,
+    ):
         """Get product info for apps and packages
 
         :param apps: items in the list should be either just ``app_id``, or :class:`dict`
@@ -97,35 +108,45 @@ class Apps:
             return
 
         if auto_access_tokens:
-            tokens = self.get_access_tokens(app_ids=list(map(lambda app: app['appid'] if isinstance(app, dict) else app, apps)),
-                                            package_ids=list(map(lambda pkg: pkg['packageid'] if isinstance(pkg, dict) else pkg, packages))
-                                            )
+            tokens = self.get_access_tokens(
+                app_ids=list(map(lambda app: app['appid'] if isinstance(app, dict) else app, apps)),
+                package_ids=list(
+                    map(
+                        lambda pkg: pkg['packageid'] if isinstance(pkg, dict) else pkg,
+                        packages,
+                    )
+                ),
+            )
         else:
             tokens = None
 
         message = MsgProto(EMsg.ClientPICSProductInfoRequest)
 
         for app in apps:
-                app_info = message.body.apps.add()
+            app_info = message.body.apps.add()
 
-                if tokens:
-                    app_info.access_token = tokens['apps'].get(app['appid'] if isinstance(app, dict) else app, 0)
+            if tokens:
+                app_info.access_token = tokens['apps'].get(
+                    app['appid'] if isinstance(app, dict) else app, 0
+                )
 
-                if isinstance(app, dict):
-                        proto_fill_from_dict(app_info, app)
-                else:
-                        app_info.appid = app
+            if isinstance(app, dict):
+                proto_fill_from_dict(app_info, app)
+            else:
+                app_info.appid = app
 
         for package in packages:
-                package_info = message.body.packages.add()
+            package_info = message.body.packages.add()
 
-                if tokens:
-                    package_info.access_token = tokens['packages'].get(package['packageid'] if isinstance(package, dict) else package, 0)
+            if tokens:
+                package_info.access_token = tokens['packages'].get(
+                    package['packageid'] if isinstance(package, dict) else package, 0
+                )
 
-                if isinstance(package, dict):
-                        proto_fill_from_dict(package_info, package)
-                else:
-                        package_info.packageid = package
+            if isinstance(package, dict):
+                proto_fill_from_dict(package_info, package)
+            else:
+                package_info.packageid = package
 
         message.body.meta_data_only = meta_data_only
         message.body.num_prev_failed = 0
@@ -142,7 +163,9 @@ class Apps:
 
             for app in chunk.apps:
                 if app.buffer and not raw:
-                    data['apps'][app.appid] = vdf.loads(app.buffer[:-1].decode('utf-8', 'replace'))['appinfo']
+                    data['apps'][app.appid] = vdf.loads(app.buffer[:-1].decode('utf-8', 'replace'))[
+                        'appinfo'
+                    ]
                 else:
                     data['apps'][app.appid] = {}
 
@@ -156,7 +179,9 @@ class Apps:
 
             for pkg in chunk.packages:
                 if pkg.buffer and not raw:
-                    data['packages'][pkg.packageid] = vdf.binary_loads(pkg.buffer[4:]).get(str(pkg.packageid), {})
+                    data['packages'][pkg.packageid] = vdf.binary_loads(pkg.buffer[4:]).get(
+                        str(pkg.packageid), {}
+                    )
                 else:
                     data['packages'][pkg.packageid] = {}
 
@@ -185,14 +210,15 @@ class Apps:
         :return: `CMsgClientPICSChangesSinceResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver.proto#L1171-L1191>`_
         :rtype: proto message instance, or :class:`None` on timeout
         """
-        return self.send_job_and_wait(MsgProto(EMsg.ClientPICSChangesSinceRequest),
-                                      {
-                                       'since_change_number': change_number,
-                                       'send_app_info_changes': app_changes,
-                                       'send_package_info_changes': package_changes,
-                                      },
-                                      timeout=10
-                                      )
+        return self.send_job_and_wait(
+            MsgProto(EMsg.ClientPICSChangesSinceRequest),
+            {
+                'since_change_number': change_number,
+                'send_app_info_changes': app_changes,
+                'send_package_info_changes': package_changes,
+            },
+            timeout=10,
+        )
 
     def get_app_ticket(self, app_id):
         """Get app ownership ticket
@@ -202,10 +228,9 @@ class Apps:
         :return: `CMsgClientGetAppOwnershipTicketResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver.proto#L158-L162>`_
         :rtype: proto message
         """
-        return self.send_job_and_wait(MsgProto(EMsg.ClientGetAppOwnershipTicket),
-                                      {'app_id': app_id},
-                                      timeout=10
-                                      )
+        return self.send_job_and_wait(
+            MsgProto(EMsg.ClientGetAppOwnershipTicket), {'app_id': app_id}, timeout=10
+        )
 
     def get_encrypted_app_ticket(self, app_id, userdata):
         """Gets the encrypted app ticket
@@ -216,10 +241,11 @@ class Apps:
         :return: `EncryptedAppTicket <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/encrypted_app_ticket.proto>_`
         :rtype: proto message
         """
-        return self.send_job_and_wait(MsgProto(EMsg.ClientRequestEncryptedAppTicket),
-                                      {'app_id': app_id, 'userdata': userdata},
-                                      timeout=10
-                                      )
+        return self.send_job_and_wait(
+            MsgProto(EMsg.ClientRequestEncryptedAppTicket),
+            {'app_id': app_id, 'userdata': userdata},
+            timeout=10,
+        )
 
     def get_depot_key(self, app_id, depot_id):
         """Get depot decryption key
@@ -231,13 +257,14 @@ class Apps:
         :return: `CMsgClientGetDepotDecryptionKeyResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver_2.proto#L533-L537>`_
         :rtype: proto message
         """
-        return self.send_job_and_wait(MsgProto(EMsg.ClientGetDepotDecryptionKey),
-                                      {
-                                       'app_id': app_id,
-                                       'depot_id': depot_id,
-                                      },
-                                      timeout=10
-                                      )
+        return self.send_job_and_wait(
+            MsgProto(EMsg.ClientGetDepotDecryptionKey),
+            {
+                'app_id': app_id,
+                'depot_id': depot_id,
+            },
+            timeout=10,
+        )
 
     def get_cdn_auth_token(self, depot_id, hostname):
         """Get CDN authentication token
@@ -252,13 +279,14 @@ class Apps:
         :return: `CMsgClientGetCDNAuthTokenResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver_2.proto#L585-L589>`_
         :rtype: proto message
         """
-        return self.send_job_and_wait(MsgProto(EMsg.ClientGetCDNAuthToken),
-                                      {
-                                       'depot_id': depot_id,
-                                       'host_name': hostname,
-                                      },
-                                      timeout=10
-                                      )
+        return self.send_job_and_wait(
+            MsgProto(EMsg.ClientGetCDNAuthToken),
+            {
+                'depot_id': depot_id,
+                'host_name': hostname,
+            },
+            timeout=10,
+        )
 
     def get_access_tokens(self, app_ids=[], package_ids=[]):
         """Get access tokens
@@ -279,18 +307,30 @@ class Apps:
         if not app_ids and not package_ids:
             return
 
-        resp = self.send_job_and_wait(MsgProto(EMsg.ClientPICSAccessTokenRequest),
-                                      {
-                                       'appids': map(int, app_ids),
-                                       'packageids': map(int, package_ids),
-                                      },
-                                      timeout=10
-                                      )
+        resp = self.send_job_and_wait(
+            MsgProto(EMsg.ClientPICSAccessTokenRequest),
+            {
+                'appids': map(int, app_ids),
+                'packageids': map(int, package_ids),
+            },
+            timeout=10,
+        )
 
         if resp:
-            return {'apps': dict(map(lambda app: (app.appid, app.access_token), resp.app_access_tokens)),
-                    'packages': dict(map(lambda pkg: (pkg.packageid, pkg.access_token), resp.package_access_tokens)),
-                    }
+            return {
+                'apps': dict(
+                    map(
+                        lambda app: (app.appid, app.access_token),
+                        resp.app_access_tokens,
+                    )
+                ),
+                'packages': dict(
+                    map(
+                        lambda pkg: (pkg.packageid, pkg.access_token),
+                        resp.package_access_tokens,
+                    )
+                ),
+            }
 
     def register_product_key(self, key):
         """Register/Redeem a CD-Key
@@ -324,10 +364,11 @@ class Apps:
                 'packageid': 1234}},
               'packageid': -1}
         """
-        resp = self.send_job_and_wait(MsgProto(EMsg.ClientRegisterKey),
-                                      {'key': key},
-                                      timeout=30,
-                                      )
+        resp = self.send_job_and_wait(
+            MsgProto(EMsg.ClientRegisterKey),
+            {'key': key},
+            timeout=30,
+        )
 
         if resp:
             details = vdf.binary_loads(resp.purchase_receipt_info).get('MessageObject', None)
@@ -336,17 +377,18 @@ class Apps:
             return EResult.Timeout, None, None
 
     def request_free_license(self, app_ids):
-        """ Request license for free app(s)
+        """Request license for free app(s)
 
         :param app_ids: list of app ids
         :type  app_ids: :class:`list`
         :return: format (:class:`.EResult`, result_details, receipt_info)
         :rtype: :class:`tuple`
         """
-        resp = self.send_job_and_wait(MsgProto(EMsg.ClientRequestFreeLicense),
-                                      {'appids': map(int, app_ids)},
-                                      timeout=10,
-                                      )
+        resp = self.send_job_and_wait(
+            MsgProto(EMsg.ClientRequestFreeLicense),
+            {'appids': map(int, app_ids)},
+            timeout=10,
+        )
 
         if resp:
             return EResult(resp.eresult), resp.granted_appids, resp.granted_packageids

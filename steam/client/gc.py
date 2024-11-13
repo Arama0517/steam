@@ -37,14 +37,14 @@ Example implementation of Dota 2 GC client with inheritance.
 The above code assumes that we have a ``myDotaModule`` that contains the appropriate
 protobufs needed to (de)serialize message for communication with GC.
 """
+
 import logging
-import gevent
-from eventemitter import EventEmitter
-from steam.utils.proto import set_proto_bit, clear_proto_bit, is_proto
-from steam.enums.emsg import EMsg
-from steam.enums import EResult
-from steam.core.msg import GCMsgHdr, GCMsgHdrProto, MsgProto
+
 from steam.client import SteamClient
+from steam.core.eventemitter import EventEmitter
+from steam.core.msg import GCMsgHdr, GCMsgHdrProto, MsgProto
+from steam.enums.emsg import EMsg
+from steam.utils.proto import clear_proto_bit, is_proto, set_proto_bit
 
 
 class GameCoordinator(EventEmitter):
@@ -66,18 +66,18 @@ class GameCoordinator(EventEmitter):
 
     def __init__(self, steam_client, app_id):
         if not isinstance(steam_client, SteamClient):
-            raise ValueError("Expected an instance of SteamClient as first argument")
+            raise ValueError('Expected an instance of SteamClient as first argument')
 
         self.steam = steam_client
         self.app_id = app_id
-        self._LOG = logging.getLogger("GC(appid:%d)" % app_id)
+        self._LOG = logging.getLogger('GC(appid:%d)' % app_id)
 
         # listen for GC messages
         self.steam.on(EMsg.ClientFromGC, self._handle_from_gc)
 
     def emit(self, event, *args):
         if event is not None:
-            self._LOG.debug("Emit event: %s" % repr(event))
+            self._LOG.debug('Emit event: %s' % repr(event))
         EventEmitter.emit(self, event, *args)
 
     def send(self, header, body):
@@ -92,10 +92,7 @@ class GameCoordinator(EventEmitter):
         message = MsgProto(EMsg.ClientToGC)
         message.header.routing_appid = self.app_id
         message.body.appid = self.app_id
-        message.body.msgtype = (set_proto_bit(header.msg)
-                                if header.proto
-                                else header.msg
-                                )
+        message.body.msgtype = set_proto_bit(header.msg) if header.proto else header.msg
         message.body.payload = header.serialize() + body
         self.steam.send(message)
 

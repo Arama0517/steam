@@ -1,9 +1,11 @@
 from weakref import WeakValueDictionary
+
 from steam.client.user import SteamUser
-from steam.enums import EPersonaState, EChatEntryType, EType, EClientUIMode
-from steam.enums.emsg import EMsg
 from steam.core.msg import MsgProto
+from steam.enums import EChatEntryType, EClientUIMode, EPersonaState, EType
+from steam.enums.emsg import EMsg
 from steam.utils.proto import proto_fill_from_dict
+
 
 class User:
     EVENT_CHAT_MESSAGE = 'chat_message'
@@ -15,9 +17,9 @@ class User:
     :type message: str
     """
 
-    persona_state = EPersonaState.Online    #: current persona state
-    user = None                             #: :class:`.SteamUser` instance once logged on
-    current_games_played = []               #: :class:`list` of app ids currently being played
+    persona_state = EPersonaState.Online  #: current persona state
+    user = None  #: :class:`.SteamUser` instance once logged on
+    current_games_played = []  #: :class:`list` of app ids currently being played
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -28,19 +30,19 @@ class User:
         self.on(self.EVENT_LOGGED_ON, self.__handle_set_persona)
         self.on(EMsg.ClientPersonaState, self.__handle_persona_state)
         self.on(EMsg.ClientFriendMsgIncoming, self.__handle_message_incoming)
-        self.on("FriendMessagesClient.IncomingMessage#1", self.__handle_message_incoming2)
+        self.on('FriendMessagesClient.IncomingMessage#1', self.__handle_message_incoming2)
 
     def __handle_message_incoming(self, msg):
         # old chat
         if msg.body.chat_entry_type == EChatEntryType.ChatMsg:
             user = self.get_user(msg.body.steamid_from)
-            self.emit("chat_message", user, msg.body.message.decode('utf-8'))
+            self.emit('chat_message', user, msg.body.message.decode('utf-8'))
 
     def __handle_message_incoming2(self, msg):
         # new chat
         if msg.body.chat_entry_type == EChatEntryType.ChatMsg and not msg.body.local_echo:
             user = self.get_user(msg.body.steamid_friend)
-            self.emit("chat_message", user, msg.body.message)
+            self.emit('chat_message', user, msg.body.message)
 
     def __handle_disconnect(self):
         self.user = None
@@ -75,7 +77,8 @@ class User:
         :param persona_state_flags: persona state flags
         :type persona_state_flags: :class:`.EPersonaStateFlag`
         """
-        if not kwargs: return
+        if not kwargs:
+            return
 
         self.persona_state = kwargs.get('persona_state', self.persona_state)
 
@@ -128,13 +131,14 @@ class User:
         These app ids will be recorded in :attr:`current_games_played`.
         """
         if not isinstance(app_ids, list):
-            raise ValueError("Expected app_ids to be of type list")
+            raise ValueError('Expected app_ids to be of type list')
 
         self.current_games_played = app_ids = list(map(int, app_ids))
 
-        self.send(MsgProto(EMsg.ClientGamesPlayed),
-                  {'games_played': [{'game_id': app_id} for app_id in app_ids]}
-                  )
+        self.send(
+            MsgProto(EMsg.ClientGamesPlayed),
+            {'games_played': [{'game_id': app_id} for app_id in app_ids]},
+        )
 
     def set_ui_mode(self, uimode):
         """

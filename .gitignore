@@ -28,6 +28,8 @@
 !recipes/*/*
 !recipes/*/*/*
 
+!pyproject.toml
+
 *.egg-info
 *.pyc
 .coverage
