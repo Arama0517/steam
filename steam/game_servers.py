@@ -396,17 +396,14 @@ def a2s_info(server_addr, timeout=2, force_goldsrc=False, challenge=0):
             'map': data.read_cstring(),
             'folder': data.read_cstring(),
             'game': data.read_cstring(),
+            'players': (data.unpack('<BBBccBB'))[0],
+            'max_players': (data.unpack('<BBBccBB'))[1],
+            'protocol': (data.unpack('<BBBccBB'))[2],
+            'server_type': (data.unpack('<BBBccBB'))[3],
+            'environment': (data.unpack('<BBBccBB'))[4],
+            'visibility': (data.unpack('<BBBccBB'))[5],
+            'mod': (data.unpack('<BBBccBB'))[6],
         }
-
-        (
-            info['players'],
-            info['max_players'],
-            info['protocol'],
-            info['server_type'],
-            info['environment'],
-            info['visibility'],
-            info['mod'],
-        ) = data.unpack('<BBBccBB')
 
         info['server_type'] = _u(info['server_type'])
         info['environment'] = _u(info['environment'])
@@ -433,18 +430,15 @@ def a2s_info(server_addr, timeout=2, force_goldsrc=False, challenge=0):
             'map': data.read_cstring(),
             'folder': data.read_cstring(),
             'game': data.read_cstring(),
+            'app_id': (data.unpack('<HBBBccBB'))[0],
+            'players': (data.unpack('<HBBBccBB'))[1],
+            'max_players': (data.unpack('<HBBBccBB'))[2],
+            'bots': (data.unpack('<HBBBccBB'))[3],
+            'server_type': (data.unpack('<HBBBccBB'))[4],
+            'environment': (data.unpack('<HBBBccBB'))[5],
+            'visibility': (data.unpack('<HBBBccBB'))[6],
+            'vac': (data.unpack('<HBBBccBB'))[7],
         }
-
-        (
-            info['app_id'],
-            info['players'],
-            info['max_players'],
-            info['bots'],
-            info['server_type'],
-            info['environment'],
-            info['visibility'],
-            info['vac'],
-        ) = data.unpack('<HBBBccBB')
 
         info['server_type'] = _u(info['server_type'])
         info['environment'] = _u(info['environment'])
@@ -608,9 +602,9 @@ def a2s_rules(server_addr, timeout=2, challenge=0, binary=False):
         value = data.read_cstring(binary=binary)
 
         if not binary:
-            if _re_match(r'^\-?[0-9]+$', value):
+            if _re_match(r'^-?[0-9]+$', value):
                 value = int(value)
-            elif _re_match(r'^\-?[0-9]+\.[0-9]+$', value):
+            elif _re_match(r'^-?[0-9]+\.[0-9]+$', value):
                 value = float(value)
 
         rules[name] = value

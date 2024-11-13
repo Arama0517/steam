@@ -461,7 +461,7 @@ async def webapi_request(url, method='GET', caller=None, session=None, params=No
         resp.raise_for_status()
 
         if onetime['raw']:
-            return resp.text
+            return await resp.text()
         elif onetime['format'] == 'json':
             return await resp.json()
         elif onetime['format'] == 'xml':
@@ -471,7 +471,7 @@ async def webapi_request(url, method='GET', caller=None, session=None, params=No
         elif onetime['format'] == 'vdf':
             import vdf as _vdf
 
-            return _vdf.loads(resp.text)
+            return _vdf.loads(await resp.text())
 
 
 async def get(

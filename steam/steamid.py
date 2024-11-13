@@ -7,7 +7,9 @@ import requests
 from steam.core.crypto import md5_hash
 from steam.enums import EInstanceFlag, EType, EUniverse
 from steam.enums.base import SteamIntEnum
-from steam.utils.web import make_requests_session
+from steam.utils.web import AioHttpClientSessionWithUA
+
+# from steam.utils.web import make_requests_session
 
 
 class ETypeChar(SteamIntEnum):
@@ -36,6 +38,70 @@ _icode_all_valid = _icode_hex + _icode_custom
 _icode_map = dict(zip(_icode_hex, _icode_custom))
 _icode_map_inv = dict(zip(_icode_custom, _icode_hex))
 _csgofrcode_chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+async def steam64_from_url(url, http_timeout=30):
+    """
+    Takes a Steam Community url and returns steam64 or None
+
+    .. warning::
+        Each call makes a http request to ``steamcommunity.com``
+
+    .. note::
+        For a reliable resolving of vanity urls use ``ISteamUser.ResolveVanityURL`` web api
+
+    :param url: steam community url
+    :type url: :class:`str`
+    :param http_timeout: how long to wait on http request before turning ``None``
+    :type http_timeout: :class:`int`
+    :return: steam64, or ``None`` if ``steamcommunity.com`` is down
+    :rtype: :class:`int` or :class:`None`
+
+    Example URLs::
+
+        https://steamcommunity.com/gid/[g:1:4]
+        https://steamcommunity.com/gid/103582791429521412
+        https://steamcommunity.com/groups/Valve
+        https://steamcommunity.com/profiles/[U:1:12]
+        https://steamcommunity.com/profiles/76561197960265740
+        https://steamcommunity.com/id/johnc
+        https://steamcommunity.com/user/cv-dgb/
+        https://steamcommunity.com/app/570
+    """
+
+    match = re.match(
+        r'^(?P<clean_url>https?://steamcommunity.com/'
+        r'(?P<type>profiles|id|gid|groups|user|app)/(?P<value>.*?))(?:/(?:.*)?)?$',
+        url,
+    )
+
+    if not match:
+        return None
+
+    async with AioHttpClientSessionWithUA() as session:
+        try:
+            # user profiles
+            if match.group('type') in ('id', 'profiles', 'user'):
+                async with session.get(url, timeout=http_timeout) as resp:
+                    data_match = re.search(
+                        'g_rgProfileData = (?P<json>{.*?});[ \t\r]*\n', await resp.text()
+                    )
+
+                if data_match:
+                    data = json.loads(data_match.group('json'))
+                    return int(data['steamid'])
+            # group profiles
+            else:
+                # text = web.get(match.group('clean_url'), timeout=http_timeout).text
+                async with session.get(match.group('clean_url'), timeout=http_timeout) as resp:
+                    data_match = re.search(
+                        r"OpenGroupChat\( *'(?P<steamid>\d+)'", await resp.text()
+                    )
+
+                if data_match:
+                    return int(data_match.group('steamid'))
+        except requests.exceptions.RequestException:
+            return None
 
 
 class SteamID(int):
@@ -298,6 +364,97 @@ class SteamID(int):
 
         return True
 
+    @staticmethod
+    def from_invite_code(code, universe=EUniverse.Public):
+        """
+        Invites urls can be generated at https://steamcommunity.com/my/friends/add
+
+        :param code: invite code (e.g. ``https://s.team/p/cv-dgb``, ``cv-dgb``)
+        :type  code: :class:`str`
+        :param universe: Steam universe (default: ``Public``)
+        :type  universe: :class:`EType`
+        :return: (accountid, type, universe, instance)
+        :rtype: :class:`tuple` or :class:`None`
+        """
+        if not code:
+            return None
+
+        m = re.match(
+            r'(https?://s\.team/p/(?P<code1>[\-' + _icode_all_valid + ']+))'
+            r'|(?P<code2>[\-' + _icode_all_valid + ']+$)',
+            code,
+        )
+        if not m:
+            return None
+
+        code = (m.group('code1') or m.group('code2')).replace('-', '')
+
+        def repl_mapper(x):
+            return _icode_map_inv[x.group()]
+
+        accountid = int(re.sub('[' + _icode_custom + ']', repl_mapper, code), 16)
+
+        if 0 < accountid < 2**32:
+            return SteamID(accountid, EType.Individual, EUniverse(universe), 1)
+
+    @staticmethod
+    def from_csgo_friend_code(code, universe=EUniverse.Public):
+        """
+        Takes CS:GO friend code and returns SteamID
+
+        :param code: CS:GO friend code (e.g. ``AEBJA-ABDC``)
+        :type  code: :class:`str`
+        :param universe: Steam universe (default: ``Public``)
+        :type  universe: :class:`EType`
+        :return: SteamID instance
+        :rtype: :class:`.SteamID` or :class:`None`
+        """
+        if not re.match(r'^[' + _csgofrcode_chars + r'\-]{10}$', code):
+            return None
+
+        code = ('AAAA-' + code).replace('-', '')
+        result = 0
+
+        for i in range(13):
+            index = _csgofrcode_chars.find(code[i])
+            if index == -1:
+                return None
+            result = result | (index << 5 * i)
+
+        (result,) = struct.unpack('<Q', struct.pack('>Q', result))
+        accountid = 0
+
+        for i in range(8):
+            result = result >> 1
+            id_nib = result & 0xF
+            result = result >> 4
+            accountid = (accountid << 4) | id_nib
+
+        return SteamID(accountid, EType.Individual, EUniverse(universe), 1)
+
+    @staticmethod
+    async def from_url(url, http_timeout=30):
+        """
+        Takes Steam community url and returns a SteamID instance or ``None``
+
+        See :py:func:`steam64_from_url` for details
+
+        :param url: steam community url
+        :type url: :class:`str`
+        :param http_timeout: how long to wait on http request before turning ``None``
+        :type http_timeout: :class:`int`
+        :return: `SteamID` instance
+        :rtype: :py:class:`steam.SteamID` or :class:`None`
+
+        """
+
+        steam64 = await steam64_from_url(url, http_timeout)
+
+        if steam64:
+            return SteamID(steam64)
+
+        return None
+
 
 def make_steam64(id=0, *args, **kwargs):
     """
@@ -451,164 +608,4 @@ def steam3_to_tuple(value):
 
     instance = int(instance)
 
-    return (steam32, etype, universe, instance)
-
-
-def from_invite_code(code, universe=EUniverse.Public):
-    """
-    Invites urls can be generated at https://steamcommunity.com/my/friends/add
-
-    :param code: invite code (e.g. ``https://s.team/p/cv-dgb``, ``cv-dgb``)
-    :type  code: :class:`str`
-    :param universe: Steam universe (default: ``Public``)
-    :type  universe: :class:`EType`
-    :return: (accountid, type, universe, instance)
-    :rtype: :class:`tuple` or :class:`None`
-    """
-    if not code:
-        return None
-
-    m = re.match(
-        r'(https?://s\.team/p/(?P<code1>[\-' + _icode_all_valid + ']+))'
-        r'|(?P<code2>[\-' + _icode_all_valid + ']+$)',
-        code,
-    )
-    if not m:
-        return None
-
-    code = (m.group('code1') or m.group('code2')).replace('-', '')
-
-    def repl_mapper(x):
-        return _icode_map_inv[x.group()]
-
-    accountid = int(re.sub('[' + _icode_custom + ']', repl_mapper, code), 16)
-
-    if 0 < accountid < 2**32:
-        return SteamID(accountid, EType.Individual, EUniverse(universe), 1)
-
-
-SteamID.from_invite_code = staticmethod(from_invite_code)
-
-
-def from_csgo_friend_code(code, universe=EUniverse.Public):
-    """
-    Takes CS:GO friend code and returns SteamID
-
-    :param code: CS:GO friend code (e.g. ``AEBJA-ABDC``)
-    :type  code: :class:`str`
-    :param universe: Steam universe (default: ``Public``)
-    :type  universe: :class:`EType`
-    :return: SteamID instance
-    :rtype: :class:`.SteamID` or :class:`None`
-    """
-    if not re.match(r'^[' + _csgofrcode_chars + r'\-]{10}$', code):
-        return None
-
-    code = ('AAAA-' + code).replace('-', '')
-    result = 0
-
-    for i in range(13):
-        index = _csgofrcode_chars.find(code[i])
-        if index == -1:
-            return None
-        result = result | (index << 5 * i)
-
-    (result,) = struct.unpack('<Q', struct.pack('>Q', result))
-    accountid = 0
-
-    for i in range(8):
-        result = result >> 1
-        id_nib = result & 0xF
-        result = result >> 4
-        accountid = (accountid << 4) | id_nib
-
-    return SteamID(accountid, EType.Individual, EUniverse(universe), 1)
-
-
-SteamID.from_csgo_friend_code = staticmethod(from_csgo_friend_code)
-
-
-def steam64_from_url(url, http_timeout=30):
-    """
-    Takes a Steam Community url and returns steam64 or None
-
-    .. warning::
-        Each call makes a http request to ``steamcommunity.com``
-
-    .. note::
-        For a reliable resolving of vanity urls use ``ISteamUser.ResolveVanityURL`` web api
-
-    :param url: steam community url
-    :type url: :class:`str`
-    :param http_timeout: how long to wait on http request before turning ``None``
-    :type http_timeout: :class:`int`
-    :return: steam64, or ``None`` if ``steamcommunity.com`` is down
-    :rtype: :class:`int` or :class:`None`
-
-    Example URLs::
-
-        https://steamcommunity.com/gid/[g:1:4]
-        https://steamcommunity.com/gid/103582791429521412
-        https://steamcommunity.com/groups/Valve
-        https://steamcommunity.com/profiles/[U:1:12]
-        https://steamcommunity.com/profiles/76561197960265740
-        https://steamcommunity.com/id/johnc
-        https://steamcommunity.com/user/cv-dgb/
-        https://steamcommunity.com/app/570
-    """
-
-    match = re.match(
-        r'^(?P<clean_url>https?://steamcommunity.com/'
-        r'(?P<type>profiles|id|gid|groups|user|app)/(?P<value>.*?))(?:/(?:.*)?)?$',
-        url,
-    )
-
-    if not match:
-        return None
-
-    web = make_requests_session()
-
-    try:
-        # user profiles
-        if match.group('type') in ('id', 'profiles', 'user'):
-            text = web.get(match.group('clean_url'), timeout=http_timeout).text
-            data_match = re.search('g_rgProfileData = (?P<json>{.*?});[ \t\r]*\n', text)
-
-            if data_match:
-                data = json.loads(data_match.group('json'))
-                return int(data['steamid'])
-        # group profiles
-        else:
-            text = web.get(match.group('clean_url'), timeout=http_timeout).text
-            data_match = re.search(r"OpenGroupChat\( *'(?P<steamid>\d+)'", text)
-
-            if data_match:
-                return int(data_match.group('steamid'))
-    except requests.exceptions.RequestException:
-        return None
-
-
-def from_url(url, http_timeout=30):
-    """
-    Takes Steam community url and returns a SteamID instance or ``None``
-
-    See :py:func:`steam64_from_url` for details
-
-    :param url: steam community url
-    :type url: :class:`str`
-    :param http_timeout: how long to wait on http request before turning ``None``
-    :type http_timeout: :class:`int`
-    :return: `SteamID` instance
-    :rtype: :py:class:`steam.SteamID` or :class:`None`
-
-    """
-
-    steam64 = steam64_from_url(url, http_timeout)
-
-    if steam64:
-        return SteamID(steam64)
-
-    return None
-
-
-SteamID.from_url = staticmethod(from_url)
+    return steam32, etype, universe, instance

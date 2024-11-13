@@ -35,7 +35,7 @@ class UnifiedMessages:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def send_um(self, method_name, params=None):
+    async def send_um(self, method_name, params=None):
         """Send service method request
 
         :param method_name: method name (e.g. ``Player.GetGameBadgeLevels#1``)
@@ -59,9 +59,9 @@ class UnifiedMessages:
         if params:
             proto_fill_from_dict(message.body, params)
 
-        return self.send_job(message)
+        return await self.send_job(message)
 
-    def send_um_and_wait(self, method_name, params=None, timeout=10, raises=False):
+    async def send_um_and_wait(self, method_name, params=None, timeout=10, raises=False):
         """Send service method request and wait for response
 
         :param method_name: method name (e.g. ``Player.GetGameBadgeLevels#1``)
@@ -76,5 +76,5 @@ class UnifiedMessages:
         :rtype: proto message instance
         :raises: :class:`gevent.Timeout`
         """
-        job_id = self.send_um(method_name, params)
-        return self.wait_msg(job_id, timeout, raises=raises)
+        job_id = await self.send_um(method_name, params)
+        return await self.wait_msg(job_id, timeout, raises=raises)

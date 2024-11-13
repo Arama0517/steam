@@ -24,7 +24,7 @@ class Apps:
         for entry in message.body.licenses:
             self.licenses[entry.package_id] = entry
 
-    def get_player_count(self, app_id, timeout=5):
+    async def get_player_count(self, app_id, timeout=5):
         """Get numbers of players for app id
 
         :param app_id: app id
@@ -32,7 +32,7 @@ class Apps:
         :return: number of players
         :rtype: :class:`int`, :class:`.EResult`
         """
-        resp = self.send_job_and_wait(
+        resp = await self.send_job_and_wait(
             MsgProto(EMsg.ClientGetNumberOfCurrentPlayersDP),
             {'appid': app_id},
             timeout=timeout,
@@ -44,7 +44,7 @@ class Apps:
         else:
             return EResult(resp.eresult)
 
-    def get_product_info(
+    async def get_product_info(
         self,
         apps=[],
         packages=[],
@@ -108,7 +108,7 @@ class Apps:
             return
 
         if auto_access_tokens:
-            tokens = self.get_access_tokens(
+            tokens = await self.get_access_tokens(
                 app_ids=list(map(lambda app: app['appid'] if isinstance(app, dict) else app, apps)),
                 package_ids=list(
                     map(
@@ -152,12 +152,12 @@ class Apps:
         message.body.num_prev_failed = 0
         message.body.supports_package_tokens = 1
 
-        job_id = self.send_job(message)
+        job_id = await self.send_job(message)
 
         data = dict(apps={}, packages={})
 
         while True:
-            chunk = self.wait_event(job_id, timeout=timeout, raises=True)
+            chunk = await self.wait_event(job_id, timeout=timeout, raises=True)
 
             chunk = chunk[0].body
 
@@ -198,7 +198,7 @@ class Apps:
 
         return data
 
-    def get_changes_since(self, change_number, app_changes=True, package_changes=False):
+    async def get_changes_since(self, change_number, app_changes=True, package_changes=False):
         """Get changes since a change number
 
         :param change_number: change number to use as stating point
@@ -210,7 +210,7 @@ class Apps:
         :return: `CMsgClientPICSChangesSinceResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver.proto#L1171-L1191>`_
         :rtype: proto message instance, or :class:`None` on timeout
         """
-        return self.send_job_and_wait(
+        return await self.send_job_and_wait(
             MsgProto(EMsg.ClientPICSChangesSinceRequest),
             {
                 'since_change_number': change_number,
@@ -220,7 +220,7 @@ class Apps:
             timeout=10,
         )
 
-    def get_app_ticket(self, app_id):
+    async def get_app_ticket(self, app_id):
         """Get app ownership ticket
 
         :param app_id: app id
@@ -228,11 +228,11 @@ class Apps:
         :return: `CMsgClientGetAppOwnershipTicketResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver.proto#L158-L162>`_
         :rtype: proto message
         """
-        return self.send_job_and_wait(
+        return await self.send_job_and_wait(
             MsgProto(EMsg.ClientGetAppOwnershipTicket), {'app_id': app_id}, timeout=10
         )
 
-    def get_encrypted_app_ticket(self, app_id, userdata):
+    async def get_encrypted_app_ticket(self, app_id, userdata):
         """Gets the encrypted app ticket
         :param app_id: app id
         :type  app_id: :class:`int`
@@ -241,13 +241,13 @@ class Apps:
         :return: `EncryptedAppTicket <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/encrypted_app_ticket.proto>_`
         :rtype: proto message
         """
-        return self.send_job_and_wait(
+        return await self.send_job_and_wait(
             MsgProto(EMsg.ClientRequestEncryptedAppTicket),
             {'app_id': app_id, 'userdata': userdata},
             timeout=10,
         )
 
-    def get_depot_key(self, app_id, depot_id):
+    async def get_depot_key(self, app_id, depot_id):
         """Get depot decryption key
 
         :param app_id: app id
@@ -257,7 +257,7 @@ class Apps:
         :return: `CMsgClientGetDepotDecryptionKeyResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver_2.proto#L533-L537>`_
         :rtype: proto message
         """
-        return self.send_job_and_wait(
+        return await self.send_job_and_wait(
             MsgProto(EMsg.ClientGetDepotDecryptionKey),
             {
                 'app_id': app_id,
@@ -266,7 +266,7 @@ class Apps:
             timeout=10,
         )
 
-    def get_cdn_auth_token(self, depot_id, hostname):
+    async def get_cdn_auth_token(self, depot_id, hostname):
         """Get CDN authentication token
 
         .. note::
@@ -279,7 +279,7 @@ class Apps:
         :return: `CMsgClientGetCDNAuthTokenResponse <https://github.com/ValvePython/steam/blob/39627fe883feeed2206016bacd92cf0e4580ead6/protobufs/steammessages_clientserver_2.proto#L585-L589>`_
         :rtype: proto message
         """
-        return self.send_job_and_wait(
+        return await self.send_job_and_wait(
             MsgProto(EMsg.ClientGetCDNAuthToken),
             {
                 'depot_id': depot_id,
@@ -288,7 +288,7 @@ class Apps:
             timeout=10,
         )
 
-    def get_access_tokens(self, app_ids=[], package_ids=[]):
+    async def get_access_tokens(self, app_ids=[], package_ids=[]):
         """Get access tokens
 
         :param app_ids: list of app ids
@@ -307,7 +307,7 @@ class Apps:
         if not app_ids and not package_ids:
             return
 
-        resp = self.send_job_and_wait(
+        resp = await self.send_job_and_wait(
             MsgProto(EMsg.ClientPICSAccessTokenRequest),
             {
                 'appids': map(int, app_ids),
@@ -332,7 +332,7 @@ class Apps:
                 ),
             }
 
-    def register_product_key(self, key):
+    async def register_product_key(self, key):
         """Register/Redeem a CD-Key
 
         :param key: CD-Key
@@ -364,7 +364,7 @@ class Apps:
                 'packageid': 1234}},
               'packageid': -1}
         """
-        resp = self.send_job_and_wait(
+        resp = await self.send_job_and_wait(
             MsgProto(EMsg.ClientRegisterKey),
             {'key': key},
             timeout=30,
@@ -376,7 +376,7 @@ class Apps:
         else:
             return EResult.Timeout, None, None
 
-    def request_free_license(self, app_ids):
+    async def request_free_license(self, app_ids):
         """Request license for free app(s)
 
         :param app_ids: list of app ids
@@ -384,7 +384,7 @@ class Apps:
         :return: format (:class:`.EResult`, result_details, receipt_info)
         :rtype: :class:`tuple`
         """
-        resp = self.send_job_and_wait(
+        resp = await self.send_job_and_wait(
             MsgProto(EMsg.ClientRequestFreeLicense),
             {'appids': map(int, app_ids)},
             timeout=10,

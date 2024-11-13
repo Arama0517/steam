@@ -6,16 +6,16 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "cachetools>=5.5.0",
-    "protobuf>=5.28.3",
+    "protobuf==3.20.*",
     "pycryptodomex>=3.21.0",
     "requests>=2.32.3",
     "urllib3>=2.2.3",
     "vdf",
     "aiohttp>=3.10.10",
     "pyee>=12.0.0",
-    "aiodns>=3.2.0",
     "lxml>=5.3.0",
     "websockets>=14.0",
+    "dnspython>=2.7.0",
 ]
 
 [tool.uv.sources]
@@ -36,6 +36,7 @@ dev = [
 line-length = 100
 preview = true
 fix = true
+exclude = ['steam/protobufs']
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "N", "I"]
@@ -43,6 +44,7 @@ ignore = ["E402"]
 
 [tool.ruff.lint.per-file-ignores]
 'steam/protobufs/*' = ["ALL"]
+'tests/*' = ["ALL"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

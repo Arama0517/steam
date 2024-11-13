@@ -10,7 +10,8 @@ from itertools import count, cycle
 from random import shuffle
 from time import time
 
-import aiodns
+from dns.asyncresolver import Resolver
+from dns.rdatatype import A
 
 from steam.core import crypto
 from steam.core.connection import TCPConnection, WebsocketConnection
@@ -320,7 +321,7 @@ class CMClient(EventEmitter):
         key, resp.body.key = crypto.generate_session_key(challenge)
         resp.body.crc = binascii.crc32(resp.body.key) & 0xFFFFFFFF
 
-        self.send(resp)
+        await self.send(resp)
 
         result = await self.wait_event(EMsg.ChannelEncryptResult, timeout=5)
 
@@ -379,7 +380,7 @@ class CMClient(EventEmitter):
 
         while True:
             await self.sleep(interval)
-            self.send(message)
+            await self.send(message)
 
     async def _handle_logon(self, msg):
         result = msg.body.eresult
@@ -446,7 +447,7 @@ class CMServerList:
     last_updated = 0  #: timestamp of when the list was last updated
     cell_id = 0  #: cell id of the server list
     bad_timestamp = 300  #: how long bad mark lasts in seconds
-    resolver = aiodns.DNSResolver()
+    resolver = Resolver()
 
     def __init__(self):
         self._LOG = logging.getLogger('CMServerList')
@@ -471,15 +472,12 @@ class CMServerList:
         self._LOG.debug('Attempting bootstrap via DNS')
 
         try:
-            # answer = socket.getaddrinfo(
-            #     'cm0.steampowered.com', 27017, socket.AF_INET, proto=socket.IPPROTO_TCP
-            # )
-            answer = await self.resolver.query('cm0.steampowered.com', 'A')
+            answer = await self.resolver.resolve('cm0.steampowered.com', A)
         except Exception as exp:
             self._LOG.error('DNS boostrap failed: %s' % str(exp))
             return False
 
-        servers = list(map(lambda addr: addr[4], answer))
+        servers = list(map(lambda addr: addr.to_text(), answer))
 
         if servers:
             self.clear()
