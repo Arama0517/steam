@@ -2,7 +2,7 @@
 name = "steam"
 version = "1.6.1"
 description = "Module for interacting with various Steam features"
-readme = "README.md"
+readme = "README.rst"
 requires-python = ">=3.12"
 dependencies = [
     "cachetools>=5.5.0",
@@ -16,6 +16,9 @@ dependencies = [
     "websockets>=14.0",
     "dnspython>=2.7.0",
 ]
+
+[tool.uv.workspace]
+members = ["steam/*"]
 
 [tool.uv.sources]
 vdf = { git = "https://github.com/solsticegamestudios/vdf.git", rev = "v4.0" }
