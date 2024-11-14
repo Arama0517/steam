@@ -20,8 +20,8 @@ dependencies = [
 [tool.uv.sources]
 vdf = { git = "https://github.com/solsticegamestudios/vdf.git", rev = "v4.0" }
 
-[tool.setuptools]
-packages = ["steam*"]
+[tool.setuptools.packages]
+find = { where = ["steam"] }
 
 [dependency-groups]
 dev = [
