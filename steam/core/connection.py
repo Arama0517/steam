@@ -37,7 +37,7 @@ class Connection:
             return False
 
         self.server_addr = server_addr
-        self.recv_queue.queue.clear()
+        self.recv_queue._queue.clear()
 
         self._reader = asyncio.create_task(self._reader_loop())
         self._writer = asyncio.create_task(self._writer_loop())
@@ -72,8 +72,8 @@ class Connection:
             self._writer = None
 
         self._readbuf = b''
-        self.send_queue.queue.clear()
-        self.recv_queue.queue.clear()
+        self.send_queue._queue.clear()
+        self.recv_queue._queue.clear()
         await self.recv_queue.put(StopIteration)
 
         if self.socket:
@@ -185,7 +185,7 @@ class WebsocketConnection(Connection):
             self.ws = await websockets.connect(server_addr, ssl=self.ssl_ctx)
             self.server_addr = server_addr
 
-            self.recv_queue.queue.clear()
+            self.recv_queue._queue.clear()
 
             self._reader_task = asyncio.create_task(self._reader_loop())
             self._writer_task = asyncio.create_task(self._writer_loop())
@@ -225,8 +225,8 @@ class WebsocketConnection(Connection):
             self._writer_task = None
 
         self._readbuf = b''
-        self.send_queue.queue.clear()
-        self.recv_queue.queue.clear()
+        self.send_queue._queue.clear()
+        self.recv_queue._queue.clear()
         await self.recv_queue.put(StopIteration)
 
         if self.ws:

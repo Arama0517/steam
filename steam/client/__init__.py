@@ -82,9 +82,9 @@ class SteamClient(CMClient, BuiltinBase):
 
         if jobid not in (-1, 18446744073709551615):
             jobid = 'job_%d' % jobid
-            if msg.body is None and self.listeners(jobid):
+            if msg.body is None and self.count_listeners(jobid):
                 msg.parse()
-            self.emit(jobid, msg)
+            await self.emit(jobid, msg)
 
         # emit UMs
         if emsg in (
@@ -92,9 +92,9 @@ class SteamClient(CMClient, BuiltinBase):
             EMsg.ServiceMethodResponse,
             EMsg.ServiceMethodSendToClient,
         ):
-            if msg.body is None and self.listeners(msg.header.target_job_name):
+            if msg.body is None and self.count_listeners(msg.header.target_job_name):
                 msg.parse()
-            self.emit(msg.header.target_job_name, msg)
+            await self.emit(msg.header.target_job_name, msg)
 
     def _handle_cm_list(self, msg):
         if self.cm_servers.last_updated + 3600 * 24 > time() and self.cm_servers.cell_id != 0:
@@ -113,7 +113,7 @@ class SteamClient(CMClient, BuiltinBase):
         if result == EResult.OK:
             self._reconnect_backoff_c = 0
             self.logged_on = True
-            self.emit(self.EVENT_LOGGED_ON)
+            await self.emit(self.EVENT_LOGGED_ON)
             return
 
         # CM kills the connection on error anyway
@@ -265,7 +265,7 @@ class SteamClient(CMClient, BuiltinBase):
             raise RuntimeError('Already logged on')
 
         if not self.connected and not self._connecting:
-            if not self.connect():
+            if not await self.connect():
                 return EResult.Fail
 
         if not self.channel_secured:

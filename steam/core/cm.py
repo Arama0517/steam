@@ -83,6 +83,7 @@ class CMClient(EventEmitter):
     _LOG = logging.getLogger('CMClient')
 
     def __init__(self, protocol=PROTOCOL_TCP):
+        super().__init__()
         self.cm_servers = CMServerList()
 
         if protocol == CMClient.PROTOCOL_WEBSOCKET:
@@ -97,10 +98,10 @@ class CMClient(EventEmitter):
         (self.on(EMsg.ClientLogOnResponse, self._handle_logon),)
         (self.on(EMsg.ClientCMList, self._handle_cm_list),)
 
-    def emit(self, event, *args):
+    async def emit(self, event, *args):
         if event is not None:
             self._LOG.debug('Emit event: %s' % repr(event))
-        super().emit(event, *args)
+        await super().emit(event, *args)
 
     async def connect(self, retry=0, delay=0):
         """Initiate connection to CM. Blocks until connected unless ``retry`` is specified.
@@ -122,7 +123,7 @@ class CMClient(EventEmitter):
 
         if delay:
             self._LOG.debug('Delayed connect: %d seconds' % delay)
-            self.emit(self.EVENT_RECONNECT, delay)
+            await self.emit(self.EVENT_RECONNECT, delay)
             await self.sleep(delay)
 
         self._LOG.debug('Connect initiated.')
@@ -139,7 +140,7 @@ class CMClient(EventEmitter):
             if isinstance(self.connection, WebsocketConnection):
                 await self.cm_servers.bootstrap_from_webapi(cm_type='websockets')
             elif isinstance(self.connection, TCPConnection):
-                if not self.cm_servers.bootstrap_from_webapi():
+                if not await self.cm_servers.bootstrap_from_webapi():
                     await self.cm_servers.bootstrap_from_dns()
 
         for i, server_addr in enumerate(cycle(self.cm_servers), start=next(i) - 1):
@@ -160,12 +161,12 @@ class CMClient(EventEmitter):
 
         self.current_server_addr = server_addr
         self.connected = True
-        self.emit(self.EVENT_CONNECTED)
+        await self.emit(self.EVENT_CONNECTED)
 
         # WebsocketConnection secures itself
         if isinstance(self.connection, WebsocketConnection):
             self.channel_secured = True
-            self.emit(self.EVENT_CHANNEL_SECURED)
+            await self.emit(self.EVENT_CHANNEL_SECURED)
 
         self._recv_loop = asyncio.create_task(self._recv_messages())
         self._connecting = False
@@ -186,7 +187,7 @@ class CMClient(EventEmitter):
 
         self._reset_attributes()
 
-        self.emit(self.EVENT_DISCONNECTED)
+        await self.emit(self.EVENT_DISCONNECTED)
 
     def _reset_attributes(self):
         for name in [
@@ -291,7 +292,7 @@ class CMClient(EventEmitter):
                 self._LOG.exception(e)
                 return
 
-        if self.listeners(emsg) or self.verbose_debug:
+        if self.count_listeners(emsg) or self.verbose_debug:
             msg.parse()
 
         if self.verbose_debug:
@@ -299,7 +300,7 @@ class CMClient(EventEmitter):
         else:
             self._LOG.debug('Incoming: %s', repr(msg))
 
-        self.emit(emsg, msg)
+        await self.emit(emsg, msg)
         return emsg, msg
 
     async def __handle_encrypt_request(self, req):
@@ -346,7 +347,7 @@ class CMClient(EventEmitter):
             self._LOG.debug('Channel secured (legacy mode)')
 
         self.channel_secured = True
-        self.emit(self.EVENT_CHANNEL_SECURED)
+        await self.emit(self.EVENT_CHANNEL_SECURED)
 
     async def __handle_multi(self, msg):
         self._LOG.debug('Multi: Unpacking')
@@ -405,7 +406,7 @@ class CMClient(EventEmitter):
             interval = msg.body.heartbeat_seconds
             self._heartbeat_loop = asyncio.create_task(self.__heartbeat(interval))
         else:
-            self.emit(self.EVENT_ERROR, EResult(result))
+            await self.emit(self.EVENT_ERROR, EResult(result))
             await self.disconnect()
 
     def _handle_cm_list(self, msg):
@@ -499,16 +500,16 @@ class CMServerList:
 
         from steam import webapi
 
-        try:
-            resp = await webapi.get(
-                'ISteamDirectory',
-                'GetCMListForConnect',
-                1,
-                params={'cellid': cell_id, 'cmtype': cm_type, 'http_timeout': 3},
-            )
-        except Exception as exp:
-            self._LOG.error('WebAPI boostrap failed: %s' % str(exp))
-            return False
+        # try:
+        resp = await webapi.get(
+            'ISteamDirectory',
+            'GetCMListForConnect',
+            1,
+            params={'cellid': cell_id, 'cmtype': cm_type, 'http_timeout': 3},
+        )
+        # except Exception as exp:
+        #     self._LOG.error('WebAPI boostrap failed: %s' % str(exp))
+        #     return False
 
         result = EResult(resp['response']['success'])
 

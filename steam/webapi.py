@@ -56,7 +56,7 @@ class APIHost:
 DEFAULT_PARAMS = {
     # api parameters
     'apihost': APIHost.Public,
-    'key': None,
+    'key': '',
     'format': 'json',
     # internal
     'https': True,
@@ -449,9 +449,9 @@ async def webapi_request(url, method='GET', caller=None, session=None, params=No
     if session is None:
         need_exit = True
         session = AioHttpClientSessionWithUA()
-
+    print(onetime)
     f: Callable[..., ClientResponse] = getattr(session, method.lower())
-    async with f(url, stream=False, timeout=onetime['http_timeout'], **kwargs) as resp:
+    async with f(url, timeout=onetime['http_timeout'], **kwargs) as resp:
         if need_exit:
             await session.__aexit__(None, None, None)
         # we keep a reference of the last response instance on the caller
