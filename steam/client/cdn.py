@@ -152,31 +152,30 @@ async def get_content_servers_from_cs(cell_id, host='cs.steamcontent.com', port=
     url = f'{proto}://{host}:{port}/serverlist/{cell_id}/{num_servers}/'
     # session = make_requests_session() if session is None else session
     async with AioHttpClientSessionWithUA() as session:
-        resp = await session.get(url)
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return []
 
-    if resp.status != 200:
-        return []
+            kv = vdf.loads(resp.text(), mapper=OrderedDict)
 
-    kv = vdf.loads(resp.text, mapper=OrderedDict)
+            if kv.get('deferred') == '1':
+                return []
 
-    if kv.get('deferred') == '1':
-        return []
+            servers = []
 
-    servers = []
+            for entry in kv['serverlist'].values():
+                server = ContentServer()
+                server.type = entry['type']
+                server.https = True if entry['https_support'] == 'mandatory' else False
+                server.host = entry['Host']
+                server.vhost = entry['vhost']
+                server.port = 443 if server.https else 80
+                server.cell_id = entry['cell']
+                server.load = entry['load']
+                server.weighted_load = entry['weightedload']
+                servers.append(server)
 
-    for entry in kv['serverlist'].values():
-        server = ContentServer()
-        server.type = entry['type']
-        server.https = True if entry['https_support'] == 'mandatory' else False
-        server.host = entry['Host']
-        server.vhost = entry['vhost']
-        server.port = 443 if server.https else 80
-        server.cell_id = entry['cell']
-        server.load = entry['load']
-        server.weighted_load = entry['weightedload']
-        servers.append(server)
-
-    return servers
+            return servers
 
 
 async def get_content_servers_from_webapi(cell_id, num_servers=20):
@@ -298,21 +297,15 @@ class CDNDepotFile(DepotFile):
 
         self.offset = max(0, min(self.size, offset))
 
-    def _get_chunk(self, chunk):
+    async def _get_chunk(self, chunk):
         if not self._lc or self._lc.sha != chunk.sha:
-            self._lcbuff = self.manifest.cdn_client.get_chunk(
+            self._lcbuff = await self.manifest.cdn_client.get_chunk(
                 self.manifest.app_id,
                 self.manifest.depot_id,
                 chunk.sha.hex(),
             )
             self._lc = chunk
         return self._lcbuff
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return self.next()
 
     def __enter__(self):
         return self
@@ -326,7 +319,7 @@ class CDNDepotFile(DepotFile):
             raise StopIteration
         return line
 
-    def read(self, length=-1):
+    async def read(self, length=-1):
         """Read bytes from the file
 
         :param length: number of bytes to read. Read the whole file if not set
@@ -371,7 +364,7 @@ class CDNDepotFile(DepotFile):
                 ):
                     if start_offset is None:
                         start_offset = chunk.offset
-                    data.write(self._get_chunk(chunk))
+                    data.write(await self._get_chunk(chunk))
 
             data.seek(self.offset - start_offset)
             data = data.read(length)
@@ -379,7 +372,7 @@ class CDNDepotFile(DepotFile):
         self.offset = min(self.size, end_offset)
         return data
 
-    def readline(self):
+    async def readline(self):
         """Read a single line
 
         :return: single file line
@@ -387,7 +380,14 @@ class CDNDepotFile(DepotFile):
         """
         buf = b''
 
-        for chunk in iter(lambda: self.read(256), b''):
+        async def async_iter_read():
+            while True:
+                chunk = await self.read(256)  # 异步调用read
+                if chunk == b'':  # 当读取到空字节流时退出
+                    break
+                yield chunk
+
+        async for chunk in async_iter_read():
             pos = chunk.find(b'\n')
             if pos > -1:
                 pos += 1  # include \n
@@ -398,14 +398,6 @@ class CDNDepotFile(DepotFile):
             buf += chunk
 
         return buf
-
-    def readlines(self):
-        """Get file contents as list of lines
-
-        :return: list of lines
-        :rtype: :class:`list` [:class:`bytes`]
-        """
-        return [line for line in self]
 
 
 class CDNDepotManifest(DepotManifest):
@@ -422,7 +414,7 @@ class CDNDepotManifest(DepotManifest):
         :param data: serialized manifest data
         :type  data: bytes
         """
-        self.cdn_client = cdn_client
+        self.cdn_client: CDNClient = cdn_client
         self.app_id = app_id
         DepotManifest.__init__(self, data)
 
@@ -487,9 +479,9 @@ class CDNClient:
         self.licensed_depot_ids = set()  #: depot_ids that the SteamClient instance has access to
 
         if not self.servers:
-            self.fetch_content_servers()
+            asyncio.run(self.fetch_content_servers())
 
-        self.load_licenses()
+        asyncio.run(self.load_licenses())
 
     def clear_cache(self):
         """Cleared cached information. Next call on methods with caching will return fresh data"""
@@ -497,7 +489,7 @@ class CDNClient:
         self.app_depots.clear()
         self.beta_passwords.clear()
 
-    def load_licenses(self):
+    async def load_licenses(self):
         """Read licenses from SteamClient instance, required for determining accessible content"""
         self.licensed_app_ids.clear()
         self.licensed_depot_ids.clear()
@@ -519,7 +511,9 @@ class CDNClient:
                 )
             )
 
-        for package_id, info in self.steam.get_product_info(packages=packages)['packages'].items():
+        for package_id, info in (await self.steam.get_product_info(packages=packages))[
+            'packages'
+        ].items():
             self.licensed_app_ids.update(info['appids'].values())
             self.licensed_depot_ids.update(info['depotids'].values())
 
@@ -546,7 +540,7 @@ class CDNClient:
             self.servers.rotate(-1)
         return self.servers[0]
 
-    def get_cdn_auth_token(self, app_id, depot_id, hostname):
+    async def get_cdn_auth_token(self, app_id, depot_id, hostname):
         """Get CDN authentication token
 
         :param app_id: app id
@@ -559,8 +553,8 @@ class CDNClient:
         :rtype: str
         """
 
-        def update_cdn_auth_tokens():
-            resp = self.steam.send_um_and_wait(
+        async def update_cdn_auth_tokens():
+            resp = await self.steam.send_um_and_wait(
                 'ContentServerDirectory.GetCDNAuthToken#1',
                 {'app_id': app_id, 'depot_id': depot_id, 'host_name': hostname},
                 timeout=10,
@@ -593,7 +587,7 @@ class CDNClient:
             or depot_id not in self.cdn_auth_tokens[app_id]
             or hostname not in self.cdn_auth_tokens[app_id][depot_id]
         ):
-            update_cdn_auth_tokens()
+            await update_cdn_auth_tokens()
         else:
             if self.cdn_auth_tokens[app_id][depot_id][hostname]['eresult'] != EResult.OK:
                 pass
@@ -603,11 +597,11 @@ class CDNClient:
                 )
                 < datetime.now()
             ):
-                update_cdn_auth_tokens()
+                await update_cdn_auth_tokens()
 
         return self.cdn_auth_tokens[app_id][depot_id][hostname]['token']
 
-    def get_depot_key(self, app_id, depot_id):
+    async def get_depot_key(self, app_id, depot_id):
         """Get depot key, which is needed to decrypt files
 
         :param app_id: app id
@@ -619,7 +613,7 @@ class CDNClient:
         :raises SteamError: error message
         """
         if depot_id not in self.depot_keys:
-            msg = self.steam.get_depot_key(app_id, depot_id)
+            msg = await self.steam.get_depot_key(app_id, depot_id)
 
             if msg and msg.eresult == EResult.OK:
                 self.depot_keys[depot_id] = msg.depot_encryption_key
@@ -652,7 +646,7 @@ class CDNClient:
                 server.port,
                 command,
                 args,
-                self.get_cdn_auth_token(app_id, depot_id, str(server.host)),
+                await self.get_cdn_auth_token(app_id, depot_id, str(server.host)),
             )
 
             try:
@@ -718,7 +712,7 @@ class CDNClient:
 
         return self._chunk_cache[(depot_id, chunk_id)]
 
-    def get_manifest_request_code(
+    async def get_manifest_request_code(
         self, app_id, depot_id, manifest_gid, branch='public', branch_password_hash=None
     ):
         """Get manifest request code for authenticating manifest download
@@ -749,7 +743,7 @@ class CDNClient:
             if branch_password_hash:
                 body['branch_password_hash'] = branch_password_hash
 
-        resp = self.steam.send_um_and_wait(
+        resp = await self.steam.send_um_and_wait(
             'ContentServerDirectory.GetManifestRequestCode#1',
             body,
             timeout=5,
@@ -797,12 +791,12 @@ class CDNClient:
             if resp.ok:
                 manifest = self.DepotManifestClass(self, app_id, resp.content)
                 if decrypt:
-                    manifest.decrypt_filenames(self.get_depot_key(app_id, depot_id))
+                    manifest.decrypt_filenames(await self.get_depot_key(app_id, depot_id))
                 self.manifests[(app_id, depot_id, manifest_gid)] = manifest
 
         return self.manifests[(app_id, depot_id, manifest_gid)]
 
-    def check_beta_password(self, app_id, password):
+    async def check_beta_password(self, app_id, password):
         """Check branch beta password to unlock encrypted branches
 
         :param app_id: App ID
@@ -812,7 +806,7 @@ class CDNClient:
         :returns: result
         :rtype: :class:`.EResult`
         """
-        resp = self.steam.send_job_and_wait(
+        resp = await self.steam.send_job_and_wait(
             MsgProto(EMsg.ClientCheckAppBetaPassword),
             {'app_id': app_id, 'betapassword': password},
         )
@@ -831,9 +825,9 @@ class CDNClient:
 
         return EResult(resp.eresult)
 
-    def get_app_depot_info(self, app_id):
+    async def get_app_depot_info(self, app_id):
         if app_id not in self.app_depots:
-            self.app_depots[app_id] = self.steam.get_product_info([app_id])['apps'][app_id][
+            self.app_depots[app_id] = (await self.steam.get_product_info([app_id]))['apps'][app_id][
                 'depots'
             ]
         return self.app_depots[app_id]
@@ -851,7 +845,9 @@ class CDNClient:
         else:
             return False
 
-    def get_manifests(self, app_id, branch='public', password=None, filter_func=None, decrypt=True):
+    async def get_manifests(
+        self, app_id, branch='public', password=None, filter_func=None, decrypt=True
+    ):
         """Get a list of CDNDepotManifest for app
 
         :param app_id: App ID
@@ -866,7 +862,7 @@ class CDNClient:
         :rtype: :class:`list` [:class:`.CDNDepotManifest`]
         :raises: ManifestError, SteamError
         """
-        depots = self.get_app_depot_info(app_id)
+        depots = await self.get_app_depot_info(app_id)
 
         is_enc_branch = False
 
@@ -879,7 +875,7 @@ class CDNClient:
                 if not password:
                     raise SteamError('Branch %r requires a password' % branch)
 
-                result = self.check_beta_password(app_id, password)
+                result = await self.check_beta_password(app_id, password)
 
                 if result != EResult.OK:
                     raise SteamError('Branch password is not valid. %r' % result)
@@ -903,7 +899,7 @@ class CDNClient:
                     # instead of a simple map {"public": GID, ...}
                     manifest_gid = manifest_gid['gid']
                 try:
-                    manifest_code = self.get_manifest_request_code(
+                    manifest_code = await self.get_manifest_request_code(
                         app_id, depot_id, int(manifest_gid), branch_name, branch_pass
                     )
                 except SteamError as exc:
@@ -993,13 +989,16 @@ class CDNClient:
                 )
 
         # collect results
-        manifests = []
+        manifests = asyncio.gather(*tasks, return_exceptions=True)
+        for manifest in manifests:
+            if isinstance(manifest, ManifestError):
+                raise manifest
 
-        for task in tasks:
-            result = task.get()
-            if isinstance(result, ManifestError):
-                raise result
-            manifests.append(result)
+        # for task in tasks:
+        #     result = task.get()
+        #     if isinstance(result, ManifestError):
+        #         raise result
+        #     manifests.append(result)
 
         # load shared depot manifests
         for app_id, depot_ids in shared_depots.items():
@@ -1011,11 +1010,11 @@ class CDNClient:
                     filter_func is None or filter_func(depot_id, depot_info)
                 )
 
-            manifests += self.get_manifests(app_id, filter_func=nested_filter_func)
+            manifests += await self.get_manifests(app_id, filter_func=nested_filter_func)
 
         return manifests
 
-    def iter_files(
+    async def iter_files(
         self,
         app_id,
         filename_filter=None,
@@ -1039,10 +1038,16 @@ class CDNClient:
         :returns: generator of of CDN files
         :rtype: [:class:`.CDNDepotFile`]
         """
-        for manifest in self.get_manifests(app_id, branch, password, filter_func):
-            yield from manifest.iter_files(filename_filter)
+        # for manifest in await self.get_manifests(app_id, branch, password, filter_func):
+        #     yield from manifest.iter_files(filename_filter)
+        manifests = await self.get_manifests(app_id, branch, password, filter_func)
 
-    def get_manifest_for_workshop_item(self, item_id):
+        # 然后异步遍历每个 manifest 的文件
+        for manifest in manifests:
+            async for file in manifest.iter_files(filename_filter):
+                yield file
+
+    async def get_manifest_for_workshop_item(self, item_id):
         """Get the manifest file for a worshop item that is hosted on SteamPipe
 
         :param item_id: Workshop ID
@@ -1051,7 +1056,7 @@ class CDNClient:
         :rtype: :class:`.CDNDepotManifest`
         :raises: ManifestError, SteamError
         """
-        resp = self.steam.send_um_and_wait(
+        resp = await self.steam.send_um_and_wait(
             'PublishedFile.GetDetails#1',
             {
                 'publishedfileids': [item_id],
@@ -1084,8 +1089,10 @@ class CDNClient:
         app_id = ws_app_id = wf.consumer_appid
 
         try:
-            manifest_code = self.get_manifest_request_code(app_id, ws_app_id, int(wf.hcontent_file))
-            manifest = self.get_manifest(
+            manifest_code = await self.get_manifest_request_code(
+                app_id, ws_app_id, wf.hcontent_file
+            )
+            manifest = await self.get_manifest(
                 app_id, ws_app_id, wf.hcontent_file, manifest_request_code=manifest_code
             )
         except SteamError as exc:
