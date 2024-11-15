@@ -24,8 +24,9 @@ vdf = { git = "https://github.com/solsticegamestudios/vdf.git", rev = "v4.0" }
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages]
-find = {where = ["steam"]}
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["steam", "steam.*"]
 
 [dependency-groups]
 dev = [
